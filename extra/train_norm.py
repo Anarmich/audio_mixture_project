@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 import json
 from torch.cuda.amp import GradScaler, autocast
+import wandb
 
 def normalize_spectrogram(spectrogram):
     mean = spectrogram.mean()
@@ -128,7 +129,9 @@ def train_model(model, train_loader, val_loader, test_loader, num_epochs=20, lea
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     scaler = GradScaler()
     model.to(device)
-    
+
+    wandb.watch(model, log="all")
+
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
@@ -146,9 +149,11 @@ def train_model(model, train_loader, val_loader, test_loader, num_epochs=20, lea
             
             if batch_idx % 10 == 0:
                 print(f"Batch {batch_idx}/{len(train_loader)}, Loss: {loss.item():.4f}")
+                wandb.log({"Batch Loss": loss.item()})
 
         epoch_loss = running_loss / len(train_loader.dataset)
         print(f"Training Loss: {epoch_loss:.4f}")
+        wandb.log({"Training Loss": epoch_loss})
 
         if val_loader is not None:
             model.eval()
@@ -164,9 +169,11 @@ def train_model(model, train_loader, val_loader, test_loader, num_epochs=20, lea
                     
                     if batch_idx % 10 == 0:
                         print(f"Validation Batch {batch_idx}/{len(val_loader)}, Loss: {loss.item():.4f}")
+                        wandb.log({"Validation Batch Loss": loss.item()})
 
             val_loss /= len(val_loader.dataset)
             print(f"Validation Loss: {val_loss:.4f}")
+            wandb.log({"Validation Loss": val_loss})
 
     # Test the model
     if test_loader is not None:
@@ -180,11 +187,16 @@ def train_model(model, train_loader, val_loader, test_loader, num_epochs=20, lea
                     loss = weighted_mse_loss(outputs, targets, weights)
                 test_loss += loss.item() * inputs.size(0)
         print(f'Test Loss: {test_loss/len(test_loader.dataset):.4f}')
-    
+        wandb.log({"Test Loss": test_loss/len(test_loader.dataset)})
+
+    # Save the model
     torch.save(model.state_dict(), 'unet_model.pth')
+    wandb.save('unet_model.pth')
     print("Model saved to 'unet_model.pth'")
 
 if __name__ == "__main__":
+    wandb.init(project='your_project_name')
+
     manifest_file = '/path/to/data_manifest.json'
     dataset = AudioDataset(manifest_file)
     
